@@ -1,0 +1,504 @@
+---
+title: "SOK-2009-EksamenH2022"
+author: "Kandidatnummer 1"
+date: today
+format: html
+theme: flatly
+code-fold: true
+toc: true
+toc-title: Innhold
+number-sections: true
+editor: visual
+---
+
+## Eksamen Sok-2009 Høst 2022
+
+## Oppgave 1
+
+```{r, results='hide', warning=FALSE}
+rm(list = ls())#rengjøre global enviroment
+options(scipen=10)#Vil kun ha 10 siffer foran
+options(digits=5)# og 5 desimaler
+#setter så man kan bruke norske bokstaver(litt spesiell hos meg da no_NO ikke virker på min pc)
+Sys.setlocale("LC_ALL", "en_US.UTF-8")
+#laster inn pakker man evn kan trenge
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(janitor)
+library(mosaic)
+library(infer)
+library(ggplot2)
+library(statisticalModeling)
+library(kableExtra)
+library(HH)
+library(car)
+library(rpart)
+library(rpart.plot)
+library(sf)
+library(psych)
+library(gapminder)
+
+```
+
+I datasettet NHANES skal vi først se på utdanningsnivå og etsinitet om det er noen forskjeller. Vi har et signifikant nivå på 1%
+
+#### Oppgave 1a
+
+"Hvilken type målenivå er variablene race1 og education? og hva er spesielt med disse to variablene?"
+
+```{r, warning=FALSE}
+#legge til pakken med alle dataene
+library(NHANES)
+#hente inn alle dataene
+require(NHANES)
+#Lagre dataene i nhanes
+nhanes <- NHANES
+#rydde navnene i nhanes
+nhanes <- janitor::clean_names(nhanes)
+#se på hva slags kolonner vi har
+names(nhanes)
+#velger de kolonner vi skal bruke og ser på de
+nhanes2 <- nhanes[c('age', 'age_decade', 'race1', 'education')]
+glimpse(nhanes2)
+```
+
+Etsiniteten(race1) er kategorisk og regnes som nominelt målenivå fordi det ikke er fornuftig i å kunne rangere disse. Denne type variabel er generelt ikke mulig å rangere da ingen er større eller mindre en den andre kategorien, unntaket er diktome variabler og er kun 2 kategorier som for eksempel kan settes til 0 og 1, ja eller nei eller de kan være true eller false. Utdanningsnivå(education) er ordinal nivå fordi den kan rangeres.
+
+```{r, warning=FALSE}
+#Sortere ut alderen fra 25 år og oppover
+nhanes25p <- nhanes2 %>% filter(age >= 25)
+#fjerner NA verdier som vi ikke kan bruke
+nhanesfra25 <- nhanes25p %>% drop_na(race1, education)
+```
+
+#### Oppgave 1b
+
+"Lag figur for å vise sammenhengen mellom utdanningsnivå og etsinitet. Kommenter dine funn. ser det ut som om det er forskjell mellom utdanningsnivå og etsinitet"
+
+```{r echo=FALSE, warning=FALSE}
+#lager plott
+nhanesfra25 %>% ggplot(aes(x=race1, fill=education)) +
+  geom_bar(position = "dodge"
+           )+
+  labs(title = "Utdanningsnivå i etsinitet fra 25 år og opp")+
+  xlab("Etsinitet")+
+  ylab("Antall utdannede")
+```
+
+Det jeg finner er at hvite mennesker har mye mer utdanning enn de andre etsinitetene, de ligger generelt ganske lavt, det ser ut som at det er en forskjell mellom utdanningsnivå og etsinitet, især den ene kategorien mot de andre, men så kan man spørre seg om hvor stor andel av disse tallene er hvite og at dette kanskje kan ha en påvirkning av resulatet i plottet. Men la oss se på tabellen:
+
+#### Oppgave 1c
+
+En tabell for å vise tallene.
+
+```{r,warning=FALSE}
+#lage tabellen
+ientabell <- table(nhanesfra25$race1, nhanesfra25$education)
+#printe tabellen
+print(knitr::kable(ientabell, "simple"))
+```
+
+Og i tabellen ser man at andelen hvite tilsammen er mye større en de andre og på et plot vil dette bare vise antall og ikke generelt om der er en sammenheng, dette må vi finne ut av ved å kjøre en statististisk test.
+
+#### Oppgave 1d
+
+For å finne ut om det har en sammenheng kan vi kjøre en statistisk test for å analyse dette. For våre kategorsike variabler bruker jeg en chisq test, fordi denne er best å bruke på disse variablene.
+
+Nullhypotesen(H0) er at det ikke er en sammenheng mellom etsinitet og utdanningsnivå.
+
+Alternativ hypotesen(H1) er at det er en sammenheng mellom etsinitet og utdanningsnivå.
+
+#### Oppgave 1e
+
+Gjennomfører testen.
+
+```{r echo=FALSE, warning=FALSE}
+chisq.test(nhanesfra25$race1, nhanesfra25$education)
+```
+
+Siden P-verdien er lavere enn signifikantnivået på 1 % ,vi kan da forkaste nullhypotesen og gå for den alternative som er at det er en sammenheng mellom etsinitet og utdanningsnivå.
+
+## Oppgave 2
+
+Vi fortsetter å bruke NHANES datasettet men nå skal vi se på Vekt, høyde og kjønn og om vi finner ut om det er en forskjell i vekt mellom menn og kvinner.
+
+#### Oppgave 2a
+
+"Hvilke type variabler er height, weight og gender? og hva er spesielt med dem?"
+
+```{r echo=FALSE, warning=FALSE}
+#sortere ut alder fra 20 år og oppover samt fherne NA i høyde, vekt og kjønn.
+nhanes20p <- nhanes %>% filter(age >= 20)
+nhanes20p <- nhanes20p %>% drop_na(weight,height,gender)
+nhanes20p <- nhanes20p[c('weight', 'height', 'gender')]
+
+glimpse(nhanes20p)
+```
+
+Kjønn er en faktor, en diktome variabel i nominalnivå og kan være 0 og 1, ja eller nei eller true og false.
+
+Vekt og høyde er tall med desimaler, disse er forholdstall som kan regnes om til relative tall og man kan finne for eksempel gjennomsnittet eller medianen..
+
+#### Oppgave 2b
+
+Lager en figur for å vise forskjell i vekt mellom menn og kvinner.
+
+```{r echo=FALSE, warning=FALSE}
+nhanes20p %>% ggplot(aes(x=gender, y= weight))+
+  geom_boxplot()+
+  labs(title = "Forskjell i vekt mellom kjønn")+
+  xlab("Kjønn")+
+  ylab("Vekt")
+  
+```
+
+Kvinner veier mindre enn menn og har også et lavere gjennomsnitt enn menn, det ser vi på boksene at mennene sin er høyere med linjen også høyere enn kvinnenes. Menn er også mer samlet rundt gjennomsnittet og færre utenfor boksen som er større avstand mellom gjennomsnittet og den faktiske vekten enn kvinner.
+
+#### Oppgave 2c
+
+Her skal vi se om det er noe sammenheng mellom vekt og høyde hos menn og kvinner.
+
+```{r echo=FALSE, warning=FALSE}
+nhanes20p %>% ggplot(aes(x= height, y = weight, color = gender))+
+  geom_point(size=1.5) +
+  geom_smooth()+
+  xlab("Høyde")+
+  ylab("Vekt")+
+  labs(title= "Sammenheng mellom høyde og vekt
+       blant kvinner og menn",
+       subtitle = "med trendlinje/regresjonslinje")
+```
+
+Ikke den beste figuren, men vi klarer å se at de røde/kvinner er lavere generelt i høyde men en sammenheng med jo høyere jo mer veier dem hvis man ser den røde linjen som viser trenden blandt kvinnene. Samme med de blå/mennene bare at de generelt er høyere enn kvinnene samt at de også er tyngre jo høyere de er. Den blå linjen viser en stigende trend også blandt mennene.
+
+#### Oppgave 2d
+
+En tabell med gjennomsnittet til høyde, vekt, standardavviket, standardfeil og antall i hver gruppe.
+
+```{r echo=FALSE, warning=FALSE}
+tiltabell <- describe(nhanes20p ~ gender)
+
+tiltabell
+```
+
+#### Oppgave 2e
+
+Gjør en permutasjonstest for å se om det er forskjell i gjennomsnittsvekten mellom kjønnene, bruker likemange gjennomsnitt som observasjoner i datasettet.
+
+```{r echo=FALSE, warning=FALSE}
+#kjører test, kode hentet fra Seminar3Fasit.qmd oppgave 1.4.2 av Eirik Heen.
+justonetest <- nhanes20p %>%
+  specify(weight~gender)%>%
+  hypothesize(null ="independence") %>% 
+  generate(reps=10000,type="permute")%>% 
+  calculate(stat="diff in means",order=c("female","male"))
+
+```
+
+##### Oppgave 2e i
+
+Nullhypotesen(H0) : Det er ingen forskjell mellom kjønnene
+
+Alternativhypotesen(H1): det er en forskjell mellom kjønnene
+
+##### Oppgave 2e ii
+
+Plotter testen i et histogram.
+
+"Hvilken type tekst er dette i klassisk statistikk?"
+
+```{r echo=FALSE, warning=FALSE}
+# regner gjennomsnittforkjellen, og lager histogram, koder hentet fra Seminar3Fasit.qmd oppgave 1.4.3 av Eirik Heen.
+gjenomsnittforskjell <- nhanes20p %>% 
+  group_by(gender) %>%
+  summarise(weight=mean(weight)) %>%
+  summarise(diff(weight)) %>%
+  pull()
+
+
+ggplot(justonetest, aes(x=stat))+
+  geom_histogram(bins = 30)+
+  xlab("vektforskjell mellom kvinner og menn, permutert under antatt at det ikke er forskjell")+
+  geom_vline(xintercept =gjenomsnittforskjell, color="red") +
+  xlab("Forskjellen i gjennomsnitt mellom Kvinner og menn")+
+  ylab("Antall")
+
+```
+
+Dette er en permutasjonstest. Permutasjon er en bestemt ordning av elementene i en mengde i dette tilfellet dataene vi har.(matematikk.net,20.09.11,[Permutasjon -- Matematikk.net](https://matematikk.net/side/Permutasjon))
+
+Den tester alle mulige kombinasjoner.
+
+Figuren viser resultatet med det faktiske forskjellen som den røde streken og vi ser på resultatet at resultatet avviker fra den faktiske forskjellen.
+
+##### Oppgave 2e iii
+
+Finne P-verdi.
+
+```{r echo=FALSE, warning=FALSE}
+# finner p verdien, kode hentet fra Seminar3Fasit.qmd oppgave 1.4.4 av Eirik Heen.
+
+p_value <- get_p_value(justonetest, obs_stat = gjenomsnittforskjell, direction = "two.sided")
+p_value_out <- p_value %>% pull(p_value)
+p_value
+p_value_out
+```
+
+P-verdien er lik ren 0 og er da mindre en 0.01 og er derfor lavere enn signifikantnivået som betyr at vi kan forkaste nullhypotesen.
+
+#### Oppgave 2f
+
+Nå skal vi gjøre noen regresjonsmodeller og da har vi satt et signifikantnivå på 5%.
+
+Regresjonsmodell 1
+
+```{r echo=FALSE, warning=FALSE}
+# legge i regresjonskoden
+a <- lm(weight ~ gender, data = nhanes20p)
+summary(a)
+
+```
+
+#### Oppgave 2g
+
+Regresjonsmodell 2
+
+```{r echo=FALSE, warning=FALSE}
+#legge inn i regresjonskoden
+b <- lm(weight ~ gender + height, data = nhanes20p)
+summary(b)
+
+
+```
+
+#### Oppgave 2h
+
+regresjonsmodell 3
+
+```{r echo=FALSE, warning=FALSE}
+#legge inn i regresjonskoden
+c <- lm(weight ~ gender + height + gender * height, data = nhanes20p)
+summary(c)
+
+```
+
+#### Oppgave 2i
+
+"Hvilken modell er best til å predikere vekten til en person?"
+
+```{r echo=FALSE, warning=FALSE}
+#koder hentet fra Seminar5.Fasit.qmd oppgave 1.1.1 og 1.4 av Eirik Heen
+
+#regne ut mse til hver regressjonsmodell
+Mse2f <- evaluate_model(a, data = nhanes20p) %>% 
+  mutate(squard_error = (weight - model_output)^2) %>%
+  summarise(mean(squard_error)) %>%
+  pull()
+Mse2f
+
+Mse2g <- evaluate_model(b, data = nhanes20p) %>% 
+  mutate(squard_error = (weight - model_output)^2) %>%
+  summarise(mean(squard_error)) %>%
+  pull()
+Mse2g
+
+Mse2h <- evaluate_model(c, data = nhanes20p) %>% 
+  mutate(squard_error = (weight - model_output)^2) %>%
+  summarise(mean(squard_error)) %>%
+  pull()
+Mse2h
+
+#tester modellene
+tester <- cv_pred_error(a, b, c, ntrials = 20)
+
+ggplot(tester, aes(x= model, y = mse))+
+  geom_boxplot()
+mean(mse ~model, data = tester)
+
+```
+
+Modellen som er best for å predikere vekten til en person er regresjonsmodell 3. dette fordi den har den laveste verdien. Muligehetn for feil er lavere enn de andre. det ser du også på boxplottet at nr c/regresjonsmodell er den med lavest snitt.
+
+#### Oppgave 2j
+
+Ja det er forskjell i vekt mellom kvinner og menn, kvinner er generelt mindre og da også lettere enn menn, kvinner har også fra naturens siden mer fett på kroppen enn menn men samtidig mindre muskler, og muskler veier mer enn fett også, så dette spiller inn på om det er forskjell mellom menn og kvinner. selv om forskjellen er liten så er den likevel der biologisk sett tenker jeg. Ved å predikere vekten utfra de modellene vi har kan vi finne dette ut.
+
+#### Oppgave 2k
+
+å predikere vekten til en kvinne og en mann som er like høye, i dette tilfeller 170cm høy.
+
+```{r echo=FALSE, warning=FALSE}
+# for å predikere noe må vi lage en funksjon for å komme med en antakelse om hva en mann eller kvinne på 170 cm vil veie. Siden mine fra før altså oppgave 2g og 2h ikke fungerer hos meg på "gjette", har jeg laget 1 ny men byttet om på height og gender, for å kun få fram om der er en forskjell.
+d <- lm(weight ~ height + gender, data = nhanes20p)
+summary(d)
+
+#lage funksjonen
+gjette <- makeFun(d)
+
+
+#anslå vekten på kvinnen
+f <- gjette(170,"female")
+#anslå vekten på mannen
+g <- gjette(170,"male")
+
+print(f)
+print(g)
+
+#inspirasjon til koder er hentet fra forelesning 7
+```
+
+En kvinne på 170 vil veie 82,9 kg mens en mann på 170 vil veie 83,7 kg. Altså veier faktisk mannen mer en kvinnen.
+
+## Oppgave 3
+
+I denne oppgaven bruker vi datasettet gapminder.
+
+```{r echo=FALSE, warning=FALSE}
+#laster inn datasettet og ser på navnene og datasettet
+gapminder <- gapminder
+gapminder <- janitor::clean_names(gapminder)
+names(gapminder)
+glimpse(gapminder)
+#sorterer ut året vi skal bruke
+gapminder2 <- gapminder %>% filter(year == 2007)
+names(gapminder2)
+gapminder2 <- gapminder2 %>% drop_na()
+```
+
+#### Oppgave 3a
+
+Lager en tabell og skal kommentere denne
+
+```{r echo=FALSE, warning=FALSE}
+#regne ut gjennomsnittene
+bnp <- gapminder2 %>% group_by(continent) %>%
+  summarise(bnp_prcap = mean(gdp_percap))
+
+pop1 <- gapminder2 %>% group_by(continent) %>%
+  summarise(antall_mennesker = mean(pop))
+
+life <- gapminder2 %>% group_by(continent) %>%
+  summarise(forventet_liv = mean(life_exp))
+
+#derretter sette sammen disse småtabellene til en stor tabell ved bruk av merge.
+tab1 <- merge(x = bnp, y = pop1, by = "continent")
+heletabell <- merge(x = tab1, y = life, by="continent")
+#printer ut tabellen
+print(knitr::kable(heletabell, "simple"))
+
+```
+
+I tabellen viser det for hvert kontinent gjennomsnittelig bnp pr capita, gjennomsnittlig antall mennesker, og gjennomsnittelig forventet levealder.
+
+#### Oppgave 3b
+
+Et plot som vi kan bruke for å forøke å forklare en forventet levealder basert på brutto nasjonalprodukt pr capita.
+
+```{r echo=FALSE, warning=FALSE}
+#Lager scatterplot
+ggplot(gapminder2,aes(x=life_exp,y=gdp_percap,col=continent, size = pop))+geom_point()
+```
+
+Her ser vi resultatet men det er ikke lett å se om det er en eventuell sammenheng.
+
+#### Oppgave 3c
+
+Siden plottet i oppgave 3b ikke er linær så skal vi prøve på å bruke logmaritmen og kjøre denne i et nytt plott for å se hva vi får og om det er lettere å se en eventuell sammenheng.
+
+```{r echo=FALSE, warning=FALSE}
+
+ggplot(gapminder2,aes(x=log(life_exp),y=log(gdp_percap),col=continent, size = pop))+geom_point()
+```
+
+Her ser man at det er mere linært og lettere å tolke en eventuell sammenheng.
+
+#### Oppgave 3d
+
+Estimer en regrasjon i log, hvordan tolker vi estimatene?, er funnene av hva vi kan forvente?, hvorfor er ikke Oceania statistisk signifikant når dette kontinentet har den høyeste forventet levealder?
+
+```{r echo=FALSE, warning=FALSE}
+logregresjon <- lm(life_exp ~ log(gdp_percap)+ continent+pop,data=gapminder2)
+summary(logregresjon)
+```
+
+I estimatene finner vi at oceania avviker mest fra de andre. I og med at vi finner at oseania har høyeste og laveste verdi som avviker veldig fra de andre så er ikke denne statistisk signifikant,
+
+#### Oppgave 3e
+
+Gjennomfører en statistisk test for å se om det er forskjell i forventet levealder mellom Amerika og Asia.
+
+```{r echo=FALSE, warning=FALSE}
+#sorterer ut det vi trenger til t.test
+Americas <- gapminder2[gapminder2$continent %in% c('Americas'), ]
+Americas <- subset(Americas, select = -c(country, year,continent,pop,gdp_percap))
+Americas
+
+Asia <- gapminder2[gapminder2$continent %in% c('Asia'), ]
+Asia <- subset(Asia, select = -c(country, year,continent,pop,gdp_percap))
+Asia
+
+t.test(Americas,Asia)
+```
+
+Nullhupotese(H0) = at forskjell ikke er tilstede. Og alternativ hypotesen er at det er forskjell så indikerer p verdien som er over signifikantnivået på 5% at det er en forskjell på forventet levealder mellom Amerika og Asia.
+
+#### Oppgave 3f
+
+Gjør en rpart analyse og lager figur samt skal tolke denne.
+
+```{r echo=FALSE, warning=FALSE}
+#koder hentet fra Seminar5.Fasit.qmd oppave 1.2 og 1.2.1 av Eirik Heen
+rpartanalyse <- rpart(life_exp ~ continent + gdp_percap + pop, data = gapminder2, cp=0.01 )
+rpartanalyse
+
+prp(rpartanalyse, type=3)
+```
+
+Rpart setter datasettet i ja eller nei kategorier og vi kan få de opp i et tre, starter med at afrika skiller seg ut til venstre og måler videre på størrelsen på bnp capita om hvor mange av landene som har bnp lavere enn 5196, hvis ja så går den til venstre, er den høyere så går den til høyre og teller andel som har bnp samme eller høyere enn 5196. og slik fortsetter den nedover, samme prisippet på andre siden hvor du finner de andre kontinentene. Bnp pr capita i kontinentene blir på en måte rangert etter hvor stor andel under har hva.
+
+## Oppgave 4
+
+#### Oppgave 4a
+
+"Hva er standardavvik?"
+
+Standardavvik er et mål som sier noe om spredning i dataene du har, kalles også for spredningsmål, det er kvadratroten av variansen.(Helbæk,M,Statistikk Kort og godt, 3utg,4opplag 2019). 1 standardavvik kan være et avvik mot høyre eller venstre, ved 2 så hopper den bort et hakk til. Se tegnet bilde.
+
+![Standardavvik i normalfordelt data, tegnet eksempel](tileksamen1.gif)
+
+#### Oppgave 4b
+
+"Hva er standard error eller standard feil?"
+
+En Standard feil er forskjellen i gjennomsnittet i et utvalg kontra gjennomsnittet for hele poulasjonen. Den gir deg en indikasjon på hvor godt utvalg du har av populasjonen. (My Race,blog and life, [Standardfeil \| hva det Er, Hvorfor Det Betyr noe, Og Hvordan Man Beregner \| My Race (racem.org)](https://racem.org/nb/standardfeil-i-statistikk/))
+
+#### Oppgave 4c
+
+"Hva er en hypotesetest og dens tilhørende p-verdi?"
+
+En hypotesetest er en statistisk test for å teste en hypotese eller en påstand, p-verdien forteller om hvor sikkert resultatet er. Du setter et signifikantnivå om hvor mye feil av type 1 du tillater for å beholde eller forkaste nullhypotesen/påstanden.
+
+Altså p verdien forteller om testen/modellen er eller ikke er statistisk signifikant.
+
+#### Oppgave 4d
+
+"Hva er konfidensintervall"
+
+Et mål på kvaliteten av estimatene i en test eller ukjente størrelser. Jo kortere konfidensintevall jo sikrere er resultatene. Den gir en øvre og nedre grense for størrelsen som estimeres.(Bjørnstad,J, Store Norske Leksikon, 26.06.18, [konfidensintervall -- Store norske leksikon (snl.no)](https://snl.no/konfidensintervall))
+
+Hvis du kaster terningen 40 ganger så har du lange konfidensintervaller og et usikkert gjennomsnitt. kaster du den derimot 40 000 ganger så får du kortere konfidensintervall og vi blir sikrere på hvor gjennomsnittet faktisk ligger. om du e 30 % sikker på om det er gjennomsnittet eller om du er 96 % sikker.
+
+### Kilder:
+
+Inspirasjon av koder er fra seminaroppgaver og forelesninger, datacamp, pensumboken, samt egen kunnskap. Der direkte kopiert måte er dette skrevet før koden brukes.
+
+Helbæk, Morten, Statistikk Kort og godt, 3 utg- 4 opplag 2019)
+
+Matematikk.net, 20.09.11, lest 12.12.22, [Permutasjlon -- Matematikk.net](https://matematikk.net/side/Permutasjon)
+
+Bjørnstad,Jan, Store Norske Leksikon, 26.06.18, lest 12.12.22, [konfidensintervall -- Store norske leksikon (snl.no)](https://snl.no/konfidensintervall))
+
+My Race,blog and life, [Standardfeil \| hva det Er, Hvorfor Det Betyr noe, Og Hvordan Man Beregner \| My Race (racem.org)](https://racem.org/nb/standardfeil-i-statistikk/) lest 12.12.22.
+
+Spørsmålene under oppgavene er skrevet inn fra eksamenoppgaven for bedre oversikt i dokumentet.

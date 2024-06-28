@@ -1,0 +1,443 @@
+---
+title: "SOK-2009,høst 2022, Gruppeeksamen"
+author: "Gruppenummer 1, Kandidatnummer 1, 35, 133"
+format: docx
+editor: visual
+---
+
+## Buktafestivalen
+
+I denne rapporten skal vi svare på noen spørsmål til verdiene vi finner i dataene til Buktafestivalen. Blandt annet skal vi se på inntekter, besøkende og salget av drikke og om andre faktorer kan ha innvirkning på besøkende og/eller salget av drikkevarer. Vi tar for oss totalt 7 oppgaver med spørsmål som vi skal svare på.
+
+### Totale Inntekter og deltagelse
+
+(Oppgave 1)
+
+```{r, echo=FALSE, results=FALSE, message=FALSE, warning=FALSE}
+# Fjerner alt fra Global Envirement så ingenting kan klusse til koden senere.
+rm(list = ls())
+
+# Laster inn nødvendige pakker.
+library(sf)
+library(car)
+library(plyr)
+library(dplyr)
+library(readr)
+library(mosaic)
+library(ggpubr)
+library(rstatix)
+library(cowplot)
+library(ggplot2)
+library(janitor)
+library(tidyverse)
+library(statisticalModeling)
+
+
+# Setter lokalet til no-No for å få norsk språk (for å få øæå).
+Sys.setlocale(locale="no_NO")
+
+# Setter max antall desimaler til 999.
+options(scipen=999)
+
+# Setter arbeidsplassen.
+setwd("~/")
+
+# Oppgave 1.
+load("~/Bukta_data_v2.Rdata")
+ls(Bukta_data)
+
+# Endrer kolonne-navn.
+colnames(Bukta_data)[4] <- "Nedbør"
+colnames(Bukta_data)[10] <- "År" 
+
+# Lager en ny kolonne plassert etter Pris kallt Inntekt, som er Antall * Pris.
+Bukta_data <- Bukta_data %>% 
+  mutate(Inntekt = Antall * Pris) %>% 
+  relocate(Inntekt, .after = Pris)
+
+
+# 1
+Bukta_data1 <- aggregate(Bukta_data['Inntekt'], by=Bukta_data['År'], sum) %>% 
+  mutate(aggregate(Bukta_data['Gjester'], by=Bukta_data['År'], sum)) 
+
+
+Bukta_data2 <- Bukta_data %>% 
+  select(Inntekt, Gjester, År) %>% 
+  group_by(År)
+
+Bukta_data3 <- Bukta_data2 %>%
+  group_by(År, Gjester) %>%
+  summarise(Total_inntekt_per_time = sum(Inntekt))
+
+Bukta_data4 <- Bukta_data3 %>% 
+  group_by(År) %>%
+  filter(Gjester == max(Gjester))
+
+Bukta_data4 <- Bukta_data4[-3]
+
+Bukta_data5 <- cbind(Bukta_data4, Bukta_data1)
+
+Bukta_data5 <- Bukta_data5[c(-5,-3)]
+
+
+names(Bukta_data5) <- c("År","Gjester","Inntekt")
+
+Bukta_data5 <- Bukta_data5 %>% 
+  mutate(Inntekt_per_deltager = Inntekt / Gjester)
+
+Bukta_data5[2,4] <- 0
+
+rm(Bukta_data1, Bukta_data2, Bukta_data3, Bukta_data4)
+
+
+```
+
+Det første vi ser i den første tabellen under her er den totale inntekten pr år og flest inne på området samtidig det året og hvor mye hver gjest da bidro til totalinntekten
+
+```{r echo=FALSE}
+print(knitr::kable(Bukta_data5, "simple"))
+```
+
+I tabellen finner vi at det var flest gjester i 2016, men at de pr deltaker brukte minst, gjester for 2017 er ikke registert og når deltakere eller inntekt pr deltaker er i sammenligning må vi se bort dra dette året. Samtidig var det færrest deltakere i 2019 men til gjengjeld brukte de mest pr deltaker. Året de hadde høyest samlet inntekt var i 2017. Deltakerne bruker mer for hvert år, inntektene øker selv om deltakerantallet har gått ned. Og hvis vi bryter disse tallene opp i dager får vi disse resultatene:
+
+```{r echo=FALSE, results=FALSE, message=FALSE, warning=FALSE}
+# 2
+Bukta_per_dag <- Bukta_data %>%
+  group_by(År, Dag) %>%
+  summarise(Total_inntekt_per_time = sum(Inntekt))
+
+Bukta_per_dag1 <- Bukta_data %>%
+  group_by(År, Gjester, Dag) %>%
+  summarise(Total_inntekt_per_time = sum(Inntekt))
+
+Bukta_per_dag1 <- Bukta_per_dag1 %>% 
+  group_by(År, Dag) %>%
+  filter(Gjester == max(Gjester)) %>% 
+  relocate(Dag, .after = År)
+
+Dag <- cbind(Bukta_per_dag, Bukta_per_dag1)
+
+Dag <- Dag[-c(4,5,7)] 
+
+names(Dag) <- c("År","Dag","Total_inntekt_per_dag", "Gjester") 
+
+Dag <- Dag %>% 
+  relocate(Gjester, .after = Dag)
+
+
+```
+
+```{r echo=FALSE}
+print(knitr::kable(Dag, "simple"))
+```
+
+I liket på dagene kan vi se at lørdag er den dagen alle årene det er flest besøkende og størst inntekt med fredagene rett bak og tordagen med lavet besøkende og lavest inntekt, men en økende stigning i inntekt og besøkende fra torsdag til lørdag er å se.
+
+I diagrammene under kan vi se dette visuelt:
+
+```{r echo=FALSE}
+
+plot1 <- ggplot(Dag, aes(x = Dag, y= Total_inntekt_per_dag, fill = År)) +
+  geom_bar(stat="identity", width=.5, position = "dodge")+
+  scale_y_continuous(breaks = c(0,200000,400000,600000,800000,
+                                1000000,1200000,1400000,1600000),
+                     limits = c(0,1600000)) +
+  labs(x = "Produkt",
+       y = "Inntekt",
+       title = "Total inntekt for hver dag pr År")
+
+plot2 <- ggplot(Bukta_data5, aes(x = År, y= Inntekt, fill = År)) +
+  geom_bar(stat="identity", width=.5, position = "dodge")+
+  scale_y_continuous(breaks = c(0,500000,1000000,1500000,2000000,
+                                2500000,3000000,3500000),
+                     limits = c(0,3500000)) +
+  labs(x = "Produkt",
+       y = "Inntekt",
+       title = "Total inntekt for hvert år")
+
+
+plot_grid(plot1, plot2, ncol = 2)
+
+
+
+```
+
+Her ser vi tallene i fra tabellene visuelt og bekrefter at torsdag er den dagen med færrest besøkende og inntekt over alle årene og økende til fredag og videre lørdag. Og på årsbasis ser vi at 2017 er året med høyest samlet inntekt og 2016 den med lavest.
+
+### Produkttyper
+
+(oppgave 2.1)
+
+Hvis vi ser på drikkevarene som selges så ser man totalt sett at Pilsner er det som selges mest, mens ikke-alkoholholdige varer selger minst.
+
+```{r echo=FALSE}
+# Oppgave 2.1  
+Produkt <- mutate(aggregate(Bukta_data['Inntekt'], 
+                            by=Bukta_data['Produkt'], sum))
+
+print(knitr::kable(Produkt, "simple"))
+
+```
+
+Dette ser vi også tydelig på dette diagrammet at Pils er mest populært.
+
+```{r echo=FALSE}
+ggplot(Produkt, aes(x = reorder(Produkt,Inntekt), y= Inntekt, fill = Produkt)) +
+  geom_bar(stat="identity", width=.5, position = "dodge")+
+  scale_y_continuous(breaks = c(0,1000000,2000000,3000000,4000000,
+                                5000000,6000000,7000000),
+                     limits = c(0,7000000)) +
+  labs(x = "Produkt",
+       y = "Inntekt",
+       title = "Total inntekt for hvert produkt")
+
+```
+
+I tabellen under får vi opp hva som er mest og minst populært pr dag hvert år.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+Produkt2 <- Bukta_data %>% 
+  select(År, Produkt, Inntekt) %>% 
+  group_by(År)
+
+Produkt2 <- Produkt2 %>%
+  group_by(Produkt, År) %>%
+  summarise(Inntekt = sum(Inntekt))
+
+print(knitr::kable(Produkt2, "simple"))
+```
+
+Vi ser et pils er fortsatt den som gir mest inntekt og non alcohol minst inntekt.
+
+```{r echo=FALSE}
+# Plotter plottet.
+ggplot(Produkt2, aes(x = reorder(Produkt,Inntekt), y= Inntekt, fill = År)) +
+  geom_bar(stat="identity", width=.5, position = "dodge") +
+  scale_y_continuous(breaks = c(0,200000,400000,600000,800000,1000000,
+                                1200000,1400000,1600000,1800000,2000000),
+                     limits = c(0,2000000)) +
+  labs(x = "Produkt per år",
+       y = "Inntekt",
+       title = "Total inntekt for hvert produkt per år")
+
+
+```
+
+Dette ser vi i diagrammet over også, pils er mest populært mens non alcoholic er mist populær, samtidig er også ikke alhoholholdige drikker rimeligere enn alkoholholdige drikker så selv om man selger flere enheter ikke alkohol så vil dette alikevel gi mindre inntekt enn om man solgte samme mengde pils. Men siden inntekten er såpass liten så vil ikke prisforskjellen utgjøre et veldig stort utslag på inntekten og vil fortsatt være minst innbrignede, og er liten variasjon på for hvert år. Bukta beer viser stigende trend over årene i popularitet selv om denne er forskjellig fra år til år. Cider er også økende i trend, mens annen type øl er lite bevegelig med unntak fra 2016. Vin er den eneste typen som viser en nedgående trend, samme med pils unntak av 2016, men er likevel den som bringer inn mest inntekter hvert år.
+
+### Parvis t-test og Holm
+
+(oppgave 2.2)
+
+Kjører først summary, derreter parvis t-test for så justere med holm til sist.
+
+```{r, echo=FALSE}
+# Oppgave 2.2
+Time <- Bukta_data %>% 
+  select(Time, Produkt, Inntekt, År, Dag) %>% 
+  group_by(Produkt, Time, År, Dag) %>%
+  summarise(Total_inntekt_per_time = sum(Time))
+
+Try <- lm(Time ~ Total_inntekt_per_time, data = Time)
+
+summary(Try)
+
+# Parvis t-test mellom produktene og inntekt.
+t.test(Time$Time, Time$Total_inntekt_per_time, mu=0, alt = "two.sided", 
+       paired = T, conf.level = 0.99)
+
+# korriger p-verdiene med metoden holm.
+with(Time, pairwise.t.test(Total_inntekt_per_time, Produkt, 
+                           p.adjust.method = "holm"))
+
+
+
+```
+
+Vi bruker parvis t-test metoden med holm-justering for å teste om gjennomsnittsforskjellen mellom målpar er null eller ikke. I denne sammenhengen ønsker vi å finne ut hvilke produkter bukta festivalen tjener mer eller mindre på og hvilke som er relativt lik. Både fra den parvise t-testen og metoden holm får vi at p-verdien er 0.00000000000000022, som er veldig signifikant siden den er så nær 0. Så resultatet er altså signifikant. Vi er 99 % sikker på at disse to gruppene er forskjellige.
+
+Til konklusjon ser vi at Bukta festivalen tjener mest på Pilsner siden gjennomsnittsforskjellen mellom produktet Pilsner er «nær nok» til null, derfor kan vi konkludere i praksis at pilser er mest ettertraktet. Bukta Beer og Cider er relativt like.
+
+### Total inntekt og inntekt pr 15 min
+
+(Oppgave 3.1)
+
+Først får du hver figur for seg og derreter samlet for bedre sammenligning.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Oppgave 3.1
+Torsdag <- filter(Bukta_data, Dag == "Torsdag")
+Fredag <- filter(Bukta_data, Dag == "Fredag")
+Lørdag <- filter(Bukta_data, Dag == "Lordag")
+
+# Torsdag.
+Torsdag <- Torsdag %>%
+  group_by(År, Per15min) %>%
+  summarise(Inntekt = sum(Inntekt))
+
+Torsdag_plot <- ggplot(Torsdag, aes(x = Per15min, y= Inntekt, color = År)) +
+  geom_line(size = 1) +
+  scale_y_continuous(breaks = c(0,10000, 20000,30000, 40000, 
+                                50000,60000,70000,80000,90000,100000),
+                     limits = c(0,100000)) +
+  scale_x_continuous(breaks = c(0,1,2,3),
+                     limits = c(0,3)) +
+  labs(x = "Per15min",
+       y = "Inntekt",
+       title = "Total inntekt for hvert 15min per år - Torsdag")
+
+
+# Fredag
+Fredag <- Fredag %>%
+  group_by(År, Per15min) %>%
+  summarise(Inntekt = sum(Inntekt))
+
+Fredag_plot <- ggplot(Fredag, aes(x = Per15min, y= Inntekt, color = År)) +
+  geom_line(size = 1) +
+  scale_y_continuous(breaks = c(0,10000, 20000,30000, 40000, 
+                                50000,60000,70000,80000,90000,100000),
+                     limits = c(0,100000)) +
+  scale_x_continuous(breaks = c(0,1,2,3,4,5,6),
+                     limits = c(0,6)) +
+  labs(x = "Per15min",
+       y = "Inntekt",
+       title = "Total inntekt for hvert 15min per år - Fredag")
+
+
+# Lørdag
+Lørdag <- Lørdag %>%
+  group_by(År, Per15min) %>%
+  summarise(Inntekt = sum(Inntekt))
+
+Lørdag_plot <- ggplot(Lørdag, aes(x = Per15min, y= Inntekt, color = År)) +
+  geom_line(size = 1) +
+  scale_y_continuous(breaks = c(0,10000, 20000,30000, 40000, 
+                                50000,60000,70000,80000,90000,100000),
+                     limits = c(0,100000)) +
+  scale_x_continuous(breaks = c(0,1,2,3,4,5,6),
+                     limits = c(0,6)) +
+  labs(x = "Per15min",
+       y = "Inntekt",
+       title = "Total inntekt for hvert 15min per år - Lørdag")
+
+Torsdag_plot
+Fredag_plot
+Lørdag_plot
+plot_grid(Torsdag_plot, Fredag_plot, Lørdag_plot, nrow = 2)
+
+
+
+```
+
+Her er 3 grafer som viser sammenhengen mellom total inntekt og hver 15 min av festivalen. En graf for hver dag, torsdag, fredag og lørdag, hvor hver viser en linje for hvert år. Vi skal nå se nærmere på hvilke trender vi ser i de ulike grafene og om det er noe forskjell mellom årene og dagene.
+
+Vi starter med å analysere torsdagen. Det første vi ser er at per15min går kun til 2.75, altså antall timer fra start av konsert per 15 min. Dette betyr at 2 timer og 45 minutter etter konserten startet endte den, mens på fredager og lørdager varer konserten i 5 timer og 45 minutter. Det er mest sannsynlig slik fordi mennesker jobber i ukedagene og å feste på torsdag for så deretter dra på jobb på fredagen bakfull er ikke særlig populært i arbeidsmarkedet.
+
+På fredag i 2016 har grafen et enormt bunnpunkt 3 timer inn i festivalen, dette er pga. problemer med betalingsterminalen, så vi ser derfor bort ifra det.
+
+Lørdag er ukedagen som er mest innbringende fordi folk har fri før festivalen og dagen etter. Også her ser vi at år 2016 ligger lavest på grafen. Dette kan også skyldes videre problemer med betalingsterminal fra fredagen eller at prisen for drikke var rett og slett lavere enn årene etter. Ser man på prisstigningen gjennom de fire årene ser man at prisen på pilsner har steget med kr 4.- fra 2016 til 2017 og 2018 og kr 6,4.- fra 2018 til 2019. Det vil si en økning på kr 10.4 ,- fra år 2016 til 2019.
+
+Under er tabellen for pris pr enhet for pils pr år.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+Prisstigning <- Bukta_data %>% 
+  select(Pris, År, Produkt) %>% 
+  filter(Produkt == "Pilsner") %>% 
+  unique() %>% 
+  arrange(År)
+
+print(knitr::kable(Prisstigning, "simple"))
+```
+
+Alt i alt var 2016 det minst innbringende året, mens 2017 var det mest innbringende, etterfulgt av 2019 og deretter 2018, selv om det er snakk om minimale forskjeller.
+
+### Linær regresjon av inntekten
+
+(oppgave 3.2)
+
+Sammenligne inntekt mellom år og dager pr 15 min.
+
+Kode for hva som er sammenlignet og resultatene ut under og forklaring til sist.
+
+```{r}
+# Oppgave 3.2
+try <- aggregate(Inntekt ~ Per15min + År + Dag, data = Bukta_data, sum)
+
+try2 <- lm(Inntekt ~ Per15min + År + Dag, data = try)
+summary(try2)
+coef(try2)
+
+linearHypothesis(try2,'DagFredag=DagLordag')
+linearHypothesis(try2,'År2017=År2018') 
+linearHypothesis(try2,'År2018=År2019') 
+linearHypothesis(try2,'År2017=År2019')
+
+
+```
+
+Vi har inntekt som uavhengig variabel. Plusstegnet inkluderer per15min, år og dag i modellen som en prediktorer (uavhengige) variabler. Resultatet til modellen er at det er kun mulig å si noe om inntekten er forskjellig fra 2016 og de andre årene, man kan altså ikke sammenligne år 2018 og 2019 for eksempel. Vi ser også at alle variablene er veldig signifikante (som indikert med "\*\*\*"), utenom for dag fredag. Vi kan dermed forkaste nullhypotesen siden p-verdien blir under signifikansnivået ofte 0,05 og 0,01.
+
+"Residual standard error" eller residulaer på norsk er avsnittet som oppsummerer residualene og viser feilen mellom prediksjonen av modellen og de faktiske resultatene. Jo mindre resultat jo bedre. I denne sammenhengen fikk vi et ganske stort tall som vil si at regresjonsmodellen passer dårlig til et datasett.
+
+I den linærene hypotesen mellom dag fredag og lørdag får vi en p-verdi som er mindre enn 0,001, derfor flagges den med tre stjerner (\*\*\*) og det finnes dermed ingen samvarians mellom de to variablene.
+
+Neste er den linære hypotesen mellom år 2017 og 2018 hvor man får en femprosents signifikansnivå, som vil si at man aksepterer så mye som fem prosent sannsynlighet (p=0,06427). En p-verdi på 0,06 vil i så fall indikere at det er 6% sannsynlighet for at det vi har observert bare er tilfeldig.
+
+I den linære hypotesen mellom år 2018 og 2019 får man en trettiprosents signifikansnivå, som vil si at man aksepterer så mye som tretti prosent sannsynlighet (p=0,3861) for at nullhypotesen stemmer og at de tendensene man har observert er tilfeldige. Dersom p-verdien er innenfor et visst signifikansnivå, sier man at den sammenhengen som er observert «er signifikant». så i denne sammenhengen sier man at «sammenhengen er signifikant innenfor et trettiprosents signifikansnivå».
+
+Mellom år 2017 og 2019 er p-verdien så godt som lik den linære hypotesen mellom år 2018 og 2019. En p-verdi på 0.3229 betyr at det er mer enn 30 prosent sjanse for å se disse resultatene i verden når nullhypotesen er sann.
+
+### Været og salg av drikkevarer
+
+(Oppgave 4)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+Vær <- aggregate(Inntekt ~ Per15min + Nedbør + Luft_temperatur + 
+                   Solskin + Vind + Gjester + Dag + År, 
+                 data = Bukta_data, sum)
+
+Vær2 <- lm(Inntekt ~ Per15min + Nedbør + Luft_temperatur + 
+            Solskin + Vind + Gjester + Dag + År, 
+          data = Vær)
+
+summary(Vær)
+coef(Vær)
+```
+
+Fra disse dataene kan de se ut til at nedbør, luft temperatur og solskinn har påvirkning på hvor mange enheter som blir solgt. Men ikke vind.
+
+Når vi legger til variabler i regresjonsanalyse vil adjusted R-squared alltid gå oppover. Så en kan ikke bruke det for å se hvor sikker vi kan være på disse dataene og derfor er vi ikke helt sikre på om alle disse variablene har særlig effekt på salget.
+
+### Forberedelse til pils-salg
+
+(Oppgave 5)
+
+Koder for hvordan utregnet og resultat med forklaring under.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+#Lager pils-verdi fra Bukta_data
+Pils <- Bukta_data %>%
+  #Grupperer for år
+  group_by(År) %>%
+  #Filtrerer for hvilken dag, hvilken time og hvilket produkt
+  filter(Dag == "Lordag",
+         Time == 20,
+         Produkt == "Pilsner") %>%
+  #Lager en pils-verdi hvor vi summerer antall pils
+  summarise(pils = sum(Antall)) %>% 
+  #Tar så gjennomsnittet av antall pils som blir kjøpt hver lørdag klokken 20
+  summarise(mean(pils)) %>% 
+  pull()
+
+
+poisson <- qpois(0.95, Pils, lower.tail = TRUE)
+
+ppois(2144, lambda = Pils)
+```
+
+Det må gjøres klart 2144 pils for at de skal være 95% sikre på at det ikke blir bestilt mer enn dette.
+
+### Oppsummering
+
+Pils er drikkevaren som gir størst inntekt, 2017 var det beste året ved samlet inntekt, og været har egentlig lite å si for salget så fremst gjestene ikke blir blåst bort. Og for å være forberedt til salgstoppen kl 20 til 21 bør det gjøres klart 2144 pils.
